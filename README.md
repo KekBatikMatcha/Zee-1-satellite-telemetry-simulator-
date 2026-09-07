@@ -22,6 +22,7 @@ _physics you can read about_.
 | --- | --- |
 | [Key findings](#key-findings) | What this simulation proves, and what you can observe in it |
 | [What it demonstrates](#what-it-demonstrates) | The five layers of the simulator, from space segment to operations |
+| [System flow](#system-flow) | End-to-end data flow, from sensors to dashboard |
 | [Quickstart](#quickstart) | Run with Docker or natively, plus API authentication |
 | [Telecommands](#telecommands) | Every uplink command the ground station can send |
 | [Physical link model (why packets get corrupted)](#physical-link-model-why-packets-get-corrupted) | The BPSK/AWGN math behind bit errors |
@@ -88,6 +89,114 @@ What running this simulation actually demonstrates:
 5. **Operations** — a live mission-control dashboard plus a REST API to drive
    it: change modes, inject faults, degrade the link, fire orbit burns, and
    even send a chat message through the noisy link.
+
+---
+
+## System flow
+
+End-to-end data flow, from sensors on the spacecraft to the mission-control
+dashboard, including the reverse telecommand path.
+
+```mermaid
+flowchart TD
+    subgraph SPACE["SPACE SEGMENT — Zee-1"]
+        SENS[Sensors<br/>power / thermal / attitude / payload]
+        OBC[On-Board Computer<br/>state mgmt, mode logic]
+        TGEN[Telemetry Generation<br/>deterministic subsystem models]
+        PKT[Packetization<br/>SYNC · VERSION · SEQ · TIMESTAMP · PAYLOAD · CRC-16]
+        RADIO[Radio / Comm Subsystem]
+
+        SENS --> OBC --> TGEN --> PKT --> RADIO
+    end
+
+    subgraph LINK["SIMULATED SPACE LINK"]
+        RF[BPSK/AWGN RF Channel<br/>Eb/N0 → BER]
+        DEGRADE[Loss / Latency / Jitter / Bandwidth Shaping]
+        RF --> DEGRADE
+    end
+
+    subgraph GROUND["GROUND SEGMENT"]
+        RECV[Receiver]
+        VALID[Packet Validator<br/>CRC check, sequence check]
+        DECODE[Decoder]
+        ANOM[Anomaly Detection<br/>rule-based thresholds]
+        RECV --> VALID --> DECODE --> ANOM
+    end
+
+    subgraph DB["DATABASE (SQLite)"]
+        TELE_T[(telemetry)]
+        PKT_T[(packets)]
+        EVT_T[(events)]
+        SEC_T[(security_events)]
+        STATE_T[(satellite_state)]
+    end
+
+    subgraph MC["MISSION CONTROL"]
+        API[FastAPI REST API]
+        DASH[Dashboard<br/>status, charts, map, events]
+        API --> DASH
+    end
+
+    RADIO --> RF
+    DEGRADE --> RECV
+    ANOM --> DB
+    DB --> API
+
+    %% ---- Telecommand (reverse direction) ----
+    subgraph TC["TELECOMMAND — Ground → Satellite"]
+        CMD[Command Builder<br/>SET_MODE / REQUEST_TELEMETRY / ORBITAL_BURN / etc.]
+        AUTH[HMAC-SHA256 Auth<br/>+ Replay Guard]
+        AUTHZ[Mode Authorization Check]
+        EXEC[Command Execution]
+        CMD --> AUTH --> AUTHZ --> EXEC
+    end
+
+    DASH -. sends command .-> CMD
+    EXEC -. via link .-> DEGRADE
+    DEGRADE -. uplink .-> OBC
+    AUTHZ -- rejected --> SEC_T
+    VALID -- CRC/seq failure --> EVT_T
+
+    %% ---- Dark blue styling ----
+    style SPACE fill:#0a1a3c,stroke:#4a7fd6,stroke-width:1px,color:#fff
+    style LINK fill:#0a1a3c,stroke:#4a7fd6,stroke-width:1px,color:#fff
+    style GROUND fill:#0a1a3c,stroke:#4a7fd6,stroke-width:1px,color:#fff
+    style DB fill:#0a1a3c,stroke:#4a7fd6,stroke-width:1px,color:#fff
+    style MC fill:#0a1a3c,stroke:#4a7fd6,stroke-width:1px,color:#fff
+    style TC fill:#0a1a3c,stroke:#4a7fd6,stroke-width:1px,color:#fff
+
+    style SENS fill:#132a5c,stroke:#4a7fd6,color:#fff
+    style OBC fill:#132a5c,stroke:#4a7fd6,color:#fff
+    style TGEN fill:#132a5c,stroke:#4a7fd6,color:#fff
+    style PKT fill:#132a5c,stroke:#4a7fd6,color:#fff
+    style RADIO fill:#132a5c,stroke:#4a7fd6,color:#fff
+    style RF fill:#132a5c,stroke:#4a7fd6,color:#fff
+    style DEGRADE fill:#132a5c,stroke:#4a7fd6,color:#fff
+    style RECV fill:#132a5c,stroke:#4a7fd6,color:#fff
+    style VALID fill:#132a5c,stroke:#4a7fd6,color:#fff
+    style DECODE fill:#132a5c,stroke:#4a7fd6,color:#fff
+    style ANOM fill:#132a5c,stroke:#4a7fd6,color:#fff
+    style API fill:#132a5c,stroke:#4a7fd6,color:#fff
+    style DASH fill:#132a5c,stroke:#4a7fd6,color:#fff
+    style CMD fill:#132a5c,stroke:#4a7fd6,color:#fff
+    style AUTH fill:#132a5c,stroke:#4a7fd6,color:#fff
+    style AUTHZ fill:#132a5c,stroke:#4a7fd6,color:#fff
+    style EXEC fill:#132a5c,stroke:#4a7fd6,color:#fff
+    style TELE_T fill:#132a5c,stroke:#4a7fd6,color:#fff
+    style PKT_T fill:#132a5c,stroke:#4a7fd6,color:#fff
+    style EVT_T fill:#132a5c,stroke:#4a7fd6,color:#fff
+    style SEC_T fill:#132a5c,stroke:#4a7fd6,color:#fff
+    style STATE_T fill:#132a5c,stroke:#4a7fd6,color:#fff
+```
+
+**Downlink (telemetry):** sensors → OBC → packetization → RF/AWGN link (with
+configurable loss/latency) → ground receiver → CRC/sequence validation →
+decode → anomaly check → SQLite → API → dashboard.
+
+**Uplink (telecommand):** dashboard/API issues a command → HMAC auth + replay
+check → mode-authorization gate → only then does it reach the OBC through the
+same noisy link. Failures at validation or auth/authorization are logged to
+`events` / `security_events`, which feed the dashboard's event log.
 
 ---
 
