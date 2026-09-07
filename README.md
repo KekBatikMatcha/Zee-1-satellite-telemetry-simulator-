@@ -3,7 +3,7 @@
 <img src="https://em-content.zobj.net/source/apple/391/satellite_1f6f0-fe0f.png" width="72" alt="satellite"/>
 
 # ZEE-1
-### Satellite Telemetry Simulator
+### Satellite Telemetry Simulator v.1.0
 
 _An educational, end-to-end simulation of a fictional **Zee-1** CubeSat and its_
 _mission-control ground station._
