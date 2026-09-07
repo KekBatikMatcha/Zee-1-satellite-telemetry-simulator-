@@ -1,0 +1,18 @@
+services:
+  satellite-telemetry-simulator:
+    build: .
+    image: zee-1-simulator:local
+    container_name: zee-1-simulator
+    ports:
+      - "8000:8000"
+    volumes:
+      - ./data:/app/data
+    environment:
+      # Override these for anything beyond local learning (see .env.example).
+      SATELLITE_COMMAND_SECRET: ${SATELLITE_COMMAND_SECRET:-dev-secret-change-me}
+      API_TOKEN: ${API_TOKEN:-dev-dashboard-token-change-me}
+      ALLOW_UNAUTHENTICATED_DASHBOARD: ${ALLOW_UNAUTHENTICATED_DASHBOARD:-false}
+      SATELLITE_ID: ${SATELLITE_ID:-Zee-1}
+      GROUND_STATION_ID: ${GROUND_STATION_ID:-KUCHING-GS}
+      LOG_LEVEL: ${LOG_LEVEL:-INFO}
+    restart: unless-stopped
