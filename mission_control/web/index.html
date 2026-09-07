@@ -1,0 +1,227 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Zee-1 Mission Control</title>
+<link rel="stylesheet" href="/static/style.css">
+<script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.1/dist/chart.umd.min.js"></script>
+</head>
+<body>
+
+<header class="topbar">
+  <div class="brand">
+    <span class="dot" id="conn-dot"></span>
+    <h1>Zee-1 <span class="sub">Satellite Telemetry Simulator</span></h1>
+  </div>
+  <div class="topbar-actions">
+    <span id="sim-state" class="pill">simulation stopped</span>
+    <button id="btn-start" class="btn-ok">Start</button>
+    <button id="btn-stop" class="btn">Stop</button>
+    <button id="btn-reset" class="btn-warn">Reset</button>
+  </div>
+</header>
+
+<main class="grid">
+
+  <!-- Spacecraft status -->
+  <section class="panel" id="p-status">
+    <h2>Spacecraft Status</h2>
+    <table class="kv">
+      <tr><td>Satellite</td><td id="sat-id">—</td></tr>
+      <tr><td>Mode</td><td><span id="sat-mode" class="badge">—</span></td></tr>
+      <tr><td>Comm</td><td id="sat-comm">—</td></tr>
+      <tr><td>Payload</td><td id="sat-payload">—</td></tr>
+      <tr><td>Mission Time</td><td id="sat-mtime">—</td></tr>
+      <tr><td>Faults</td><td id="sat-faults">—</td></tr>
+    </table>
+  </section>
+
+  <!-- Power -->
+  <section class="panel">
+    <h2>Power (EPS)</h2>
+    <div class="meter"><label>Battery</label><div class="bar"><div id="batt-bar" class="fill"></div></div><span id="batt-pct">—</span></div>
+    <table class="kv">
+      <tr><td>Battery Voltage</td><td id="batt-v">—</td></tr>
+      <tr><td>Solar Power</td><td id="solar-w">—</td></tr>
+      <tr><td>Consumption</td><td id="cons-w">—</td></tr>
+      <tr><td>Net Power</td><td id="net-w">—</td></tr>
+    </table>
+  </section>
+
+  <!-- Thermal -->
+  <section class="panel">
+    <h2>Thermal</h2>
+    <div class="big-val"><div id="temp-val">—</div><div class="unit">°C</div></div>
+    <table class="kv">
+      <tr><td>Status</td><td id="temp-status">—</td></tr>
+    </table>
+  </section>
+
+  <!-- Computing -->
+  <section class="panel">
+    <h2>Computing (OBC)</h2>
+    <div class="meter"><label>CPU</label><div class="bar"><div id="cpu-bar" class="fill"></div></div><span id="cpu-pct">—</span></div>
+    <div class="meter"><label>Memory</label><div class="bar"><div id="mem-bar" class="fill"></div></div><span id="mem-pct">—</span></div>
+    <div class="meter"><label>Storage</label><div class="bar"><div id="sto-bar" class="fill"></div></div><span id="sto-pct">—</span></div>
+  </section>
+
+  <!-- Position + map -->
+  <section class="panel wide">
+    <h2>Position & Ground Track</h2>
+    <div class="position">
+      <canvas id="map-canvas" width="860" height="420"></canvas>
+    </div>
+    <table class="kv four">
+      <tr>
+        <td>Latitude</td><td id="pos-lat">—</td>
+        <td>Longitude</td><td id="pos-lon">—</td>
+      </tr>
+      <tr>
+        <td>Altitude</td><td id="pos-alt">—</td>
+        <td>Velocity</td><td id="pos-vel">—</td>
+      </tr>
+      <tr>
+        <td>Orbit (alt / period)</td><td id="pos-orb" class="wide">—</td>
+        <td>Attitude</td><td><span id="pos-att" class="badge">—</span></td>
+      </tr>
+      <tr>
+        <td>Elevation</td><td id="pos-el">—</td>
+        <td>Visibility</td><td><span id="pos-vis" class="badge">—</span></td>
+      </tr>
+    </table>
+  </section>
+
+  <!-- Onboard storage -->
+  <section class="panel">
+    <h2>Onboard Storage</h2>
+    <div class="meter"><label>Queue</label><div class="bar"><div id="queue-bar" class="fill"></div></div><span id="queue-pct">—</span></div>
+    <table class="kv">
+      <tr><td>Queued Packets</td><td id="queue-n">—</td></tr>
+      <tr><td>Capacity</td><td id="queue-cap">—</td></tr>
+      <tr><td>Dropped</td><td id="queue-drop">—</td></tr>
+    </table>
+  </section>
+
+  <!-- Communication -->
+  <section class="panel">
+    <h2>Communication</h2>
+    <table class="kv">
+      <tr><td>Packets Received</td><td id="comm-rx">—</td></tr>
+      <tr><td>Packets Accepted</td><td id="comm-ok">—</td></tr>
+      <tr><td>Packets Lost</td><td id="comm-loss">—</td></tr>
+      <tr><td>CRC Errors</td><td id="comm-crc">—</td></tr>
+      <tr><td>Missing</td><td id="comm-miss">—</td></tr>
+      <tr><td>Rejected</td><td id="comm-rej">—</td></tr>
+      <tr><td>Avg Latency</td><td id="comm-lat">—</td></tr>
+      <tr><td>Data Rate</td><td id="comm-rate">—</td></tr>
+      <tr><td>Eb/N0 (link budget)</td><td id="comm-ebn0">—</td></tr>
+      <tr><td>Measured BER</td><td id="comm-ber">—</td></tr>
+      <tr><td>Modulation</td><td id="comm-mod">—</td></tr>
+      <tr><td>Link Quality</td><td><span id="comm-quality" class="badge">—</span></td></tr>
+    </table>
+  </section>
+
+  <!-- Charts -->
+  <section class="panel wide">
+    <h2>Telemetry Trends</h2>
+    <div class="charts">
+      <div class="chart"><canvas id="ch-temp"></canvas></div>
+      <div class="chart"><canvas id="ch-batt"></canvas></div>
+      <div class="chart"><canvas id="ch-solar"></canvas></div>
+      <div class="chart"><canvas id="ch-cpu"></canvas></div>
+      <div class="chart"><canvas id="ch-mem"></canvas></div>
+      <div class="chart"><canvas id="ch-alt"></canvas></div>
+    </div>
+  </section>
+
+  <!-- Operations: faults + commands -->
+  <section class="panel wide">
+    <h2>Operations</h2>
+    <div class="ops">
+      <fieldset>
+        <legend>Telecommand (ground -> space)</legend>
+        <select id="cmd-select">
+          <option value="SET_MODE">SET_MODE</option>
+          <option value="REQUEST_TELEMETRY">REQUEST_TELEMETRY</option>
+          <option value="START_PAYLOAD">START_PAYLOAD</option>
+          <option value="STOP_PAYLOAD">STOP_PAYLOAD</option>
+          <option value="ORBITAL_BURN">ORBITAL_BURN</option>
+          <option value="ADJUST_ATTITUDE">ADJUST_ATTITUDE</option>
+        </select>
+        <label id="cmd-param-label" for="cmd-mode">mode</label>
+        <select id="cmd-mode">
+          <option value="NORMAL">NORMAL</option>
+          <option value="SAFE">SAFE</option>
+          <option value="PAYLOAD_OPERATION">PAYLOAD_OPERATION</option>
+          <option value="COMMUNICATION">COMMUNICATION</option>
+        </select>
+        <input id="cmd-dv" type="number" min="-200" max="200" step="5" value="20" hidden>
+        <span id="cmd-dv-unit" hidden>m/s</span>
+        <select id="cmd-att" hidden>
+          <option value="NADIR">NADIR</option>
+          <option value="SUN_POINTING">SUN_POINTING</option>
+          <option value="INERTIAL">INERTIAL</option>
+        </select>
+        <button id="btn-cmd" class="btn-ok">Send on Uplink</button>
+        <span id="cmd-result" class="op-note">—</span>
+      </fieldset>
+
+      <fieldset>
+        <legend>Fault injection</legend>
+        <select id="fault-select"></select>
+        <button id="btn-fault" class="btn-warn">Inject</button>
+        <button id="btn-clear-fault" class="btn">Clear</button>
+        <span id="fault-result" class="op-note">—</span>
+      </fieldset>
+
+      <fieldset>
+        <legend>Link budget (physical RF)</legend>
+        <label for="ebn0-input">Eb/N0</label>
+        <input id="ebn0-input" type="number" min="-10" max="40" step="0.5" value="10">
+        <span>dB</span>
+        <button id="btn-ebn0" class="btn-ok">Apply</button>
+        <span id="ebn0-result" class="op-note">—</span>
+      </fieldset>
+
+      <fieldset>
+        <legend>Chat / message link tester</legend>
+        <label for="chat-direction">direction</label>
+        <select id="chat-direction">
+          <option value="DOWN">satellite -&gt; ground</option>
+          <option value="UP">ground -&gt; satellite</option>
+        </select>
+        <input id="chat-input" type="text" maxlength="4000"
+               placeholder="hello how are you?">
+        <button id="btn-chat" class="btn-ok">Send through link</button>
+        <span id="chat-result" class="op-note">—</span>
+        <div id="chat-log" class="feed feed-tall"></div>
+      </fieldset>
+    </div>
+  </section>
+
+  <!-- Events -->
+  <section class="panel wide">
+    <h2>Mission Events</h2>
+    <div id="events-feed" class="feed"></div>
+  </section>
+
+  <section class="panel wide">
+    <h2>Security Events</h2>
+    <div id="security-feed" class="feed"></div>
+  </section>
+
+</main>
+
+<footer>
+  Zee-1 is a fictional educational CubeSat simulator. Not a real satellite.
+  Telemetry: satellite &rarr; ground direction. Telecommand: ground &rarr; satellite.
+</footer>
+
+<script>
+  // __API_TOKEN__ is injected server-side from API_TOKEN.
+  window.SIM_API_TOKEN = "__API_TOKEN__";
+</script>
+<script src="/static/app.js"></script>
+</body>
+</html>
