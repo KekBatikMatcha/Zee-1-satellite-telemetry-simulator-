@@ -34,22 +34,27 @@ counterpart, simplified deliberately and documented as such.
 
 ## 2. System Components
 
-| Component            | Module                | Responsibility                                                        |
-| -------------------- | --------------------- | --------------------------------------------------------------------- |
-| Simulated CubeSat    | `satellite/`          | Subsystem state, operating modes, onboard storage, list & act         |
-| Telemetry            | `telemetry/`          | Telemetry schema, deterministic value models, packet build/parse      |
-| Communication link   | `communication/`      | Simulated space channel: loss, corruption, latency, jitter, visibility|
-| Ground station       | `ground_station/`     | Receiver, validator, decoder, contact/state tracking                  |
-| Database             | `database/`           | SQLite persistence: telemetry, packets, events, security, satellite   |
-| Mission control      | `mission_control/`    | FastAPI backend + REST API for dashboard                              |
-| Dashboard            | `mission_control/web/`| Browser UI (HTML/CSS/JS + Chart.js)                                   |
-| Security             | `security/`           | Command auth (HMAC-SHA256), replay protection, security events        |
-| Simulation           | `simulation/`         | Fault injection, orchestration, time model                            |
-| Tests                | `tests/`              | Unit, integration, and failure-injection tests                        |
+| Component            | Module                 | Responsibility                                                         |
+| --------------------- | ----------------------- | ------------------------------------------------------------------------ |
+| Simulated CubeSat     | `satellite/`            | Subsystem state, operating modes, onboard storage, list & act            |
+| Telemetry             | `telemetry/`            | Telemetry schema, deterministic value models, packet build/parse         |
+| Communication link    | `communication/`        | Simulated space channel: loss, corruption, latency, jitter, visibility   |
+| Ground station        | `ground_station/`       | Receiver, validator, decoder, contact/state tracking                     |
+| Database              | `database/`             | SQLite persistence: telemetry, packets, events, security, satellite      |
+| Mission control       | `mission_control/`      | FastAPI backend + REST API for dashboard                                 |
+| Dashboard             | `mission_control/web/`  | Browser UI (HTML/CSS/JS + Chart.js)                                      |
+| Security              | `security/`             | Command auth (HMAC-SHA256), replay protection, security events           |
+| Simulation            | `simulation/`           | Fault injection, orchestration, time model                               |
+| Tests                 | `tests/`                | Unit, integration, and failure-injection tests                           |
 
 ---
 
 ## 3. Data Flow
+
+The ASCII diagram below gives a terminal-readable overview; the Mermaid
+diagram after it is the canonical, versioned reference for both the downlink
+(telemetry) and uplink (telecommand) paths. If the two ever drift, the Mermaid
+diagram wins.
 
 ```
                      SPACE SEGMENT
@@ -83,36 +88,82 @@ counterpart, simplified deliberately and documented as such.
   └───────────────────────────────────────────────┘
 ```
 
-The uplink path (Phase 15+) flows in reverse: dashboard/API → command packet →
-HMAC + replay check → decryption of intent → command execution on the
-simulated spacecraft.
-
 ```mermaid
-flowchart LR
-    subgraph Space["Space Segment (Zee-1)"]
-        S[Sensors & Subsystems] --> OBC[On-Board Computer]
-        OBC --> TM[Telemetry Manager]
-        TM --> PK[Packetizer]
-        PK --> RF[Radio Simulator]
-        ST[Onboard Storage] <--> TM
+flowchart TD
+    subgraph SPACE["🛰️ SPACE SEGMENT — Zee-1"]
+        S[Sensors & Subsystems<br/>EPS · ADCS · Thermal · Payload]
+        OBC[On-Board Computer]
+        TM[Telemetry Manager]
+        PK[Packetizer<br/>sync · version · seq · CRC]
+        ST[Onboard Storage<br/>store & forward]
+        RF[Radio Simulator]
+
+        S --> OBC --> TM --> PK --> RF
+        ST <--> TM
     end
-    subgraph Link["Simulated Space Link"]
-        L{loss / corruption / latency / visibility}
+
+    subgraph LINK["📶 SIMULATED SPACE LINK"]
+        L[Loss / Corruption / Latency / Jitter / Visibility]
     end
-    subgraph Ground["Ground Segment"]
-        RX[Receiver] --> VAL[Packet Validator]
-        VAL --> DEC[Decoder]
-        DEC --> DB[(SQLite)]
-        GS[Ground-Station State] --> DB
+
+    subgraph GROUND["📡 GROUND SEGMENT"]
+        RX[Receiver]
+        VAL[Packet Validator<br/>CRC, sequence gaps]
+        DEC[Decoder]
+        GS[Ground-Station State]
+
+        RX --> VAL --> DEC
+        GS --> DEC
     end
-    subgraph MC["Mission Control"]
-        API[FastAPI] --> DB
-        API --> DASH[Dashboard]
+
+    subgraph DB["🗄️ DATABASE — SQLite"]
+        D[(telemetry · packets ·<br/>events · security_events ·<br/>satellite_state)]
     end
-    S --> TM
-    RF --> L
-    L --> RX
-    DB <--> API
+
+    subgraph MC["🎛️ MISSION CONTROL"]
+        API[FastAPI REST API]
+        DASH[Dashboard]
+        API --> DASH
+    end
+
+    subgraph CMD["🔐 TELECOMMAND — Ground → Satellite"]
+        IN[Control Input / Command]
+        AUTH[HMAC-SHA256 + Replay Check]
+        AUTHZ[Mode-Aware Authorization]
+        IN --> AUTH --> AUTHZ
+    end
+
+    RF --> L --> RX
+    DEC --> D
+    D <--> API
+    DASH -. issues command .-> IN
+    AUTHZ -. via link .-> L
+    L -. uplink .-> OBC
+
+    style SPACE fill:#0a1a3c,stroke:#4a7fd6,stroke-width:1px,color:#fff
+    style LINK fill:#0a1a3c,stroke:#4a7fd6,stroke-width:1px,color:#fff
+    style GROUND fill:#0a1a3c,stroke:#4a7fd6,stroke-width:1px,color:#fff
+    style DB fill:#0a1a3c,stroke:#4a7fd6,stroke-width:1px,color:#fff
+    style MC fill:#0a1a3c,stroke:#4a7fd6,stroke-width:1px,color:#fff
+    style CMD fill:#0a1a3c,stroke:#4a7fd6,stroke-width:1px,color:#fff
+
+    style S fill:#132a5c,stroke:#4a7fd6,color:#fff
+    style OBC fill:#132a5c,stroke:#4a7fd6,color:#fff
+    style TM fill:#132a5c,stroke:#4a7fd6,color:#fff
+    style PK fill:#132a5c,stroke:#4a7fd6,color:#fff
+    style ST fill:#132a5c,stroke:#4a7fd6,color:#fff
+    style RF fill:#132a5c,stroke:#4a7fd6,color:#fff
+    style L fill:#132a5c,stroke:#4a7fd6,color:#fff
+    style RX fill:#132a5c,stroke:#4a7fd6,color:#fff
+    style VAL fill:#132a5c,stroke:#4a7fd6,color:#fff
+    style DEC fill:#132a5c,stroke:#4a7fd6,color:#fff
+    style GS fill:#132a5c,stroke:#4a7fd6,color:#fff
+    style D fill:#132a5c,stroke:#4a7fd6,color:#fff
+    style API fill:#132a5c,stroke:#4a7fd6,color:#fff
+    style DASH fill:#132a5c,stroke:#4a7fd6,color:#fff
+    style IN fill:#132a5c,stroke:#4a7fd6,color:#fff
+    style AUTH fill:#132a5c,stroke:#4a7fd6,color:#fff
+    style AUTHZ fill:#132a5c,stroke:#4a7fd6,color:#fff
 ```
 
 ---
@@ -187,15 +238,13 @@ station so hardware-in-the-loop comparisons can be made later.
 SQLite in the first version (zero configuration, file-based, ACID, good enough
 for an educational single-instance deployment).
 
-Tables:
-
-| Table            | Contents                                                    |
-| ---------------- | ----------------------------------------------------------- |
-| `telemetry`      | Decoded telemetry records (one row per accepted packet)     |
-| `packets`        | Raw packet metadata: seq, type, size, CRC validity, status  |
-| `events`         | Mission events (mode changes, fades, faults, contacts)      |
-| `security_events`| Security-relevant events (auth failure, replay, etc.)       |
-| `satellite_state`| Latest snapshot of spacecraft state                         |
+| Table             | Contents                                                     |
+| ------------------- | --------------------------------------------------------------- |
+| `telemetry`        | Decoded telemetry records (one row per accepted packet)         |
+| `packets`          | Raw packet metadata: seq, type, size, CRC validity, status      |
+| `events`           | Mission events (mode changes, fades, faults, contacts)          |
+| `security_events`  | Security-relevant events (auth failure, replay, etc.)           |
+| `satellite_state`  | Latest snapshot of spacecraft state                             |
 
 Indexes are placed on the hot query paths: timestamp ranges, sequence numbers,
 and event ordering. A future PostgreSQL migration (< 100 lines of SQL) is a
@@ -273,15 +322,12 @@ transition, suspicious telemetry) is written to `security_events`.
 - **No fake control.** The dashboard is a monitor, not a spacecraft control
   surface. Command handling is explicit, validated, and auditable.
 
-```mermaid
-flowchart TB
-    A[Simulation Engine] --> B[Zee-1 Spacecraft]
-    B --> C[Telemetry Packet]
-    C --> D[Space Link]
-    D --> E[Ground Station]
-    E --> F[Database]
-    F --> G[FastAPI]
-    G --> H[Dashboard]
-    I[Control Inputs / Commands] --> J[Command Packet + HMAC]
-    J --> D
-```
+---
+
+## See also
+
+- [`../README.md`](../README.md) — project overview, quickstart, and a
+  reader-facing version of the system-flow diagram
+- [`communication.md`](communication.md) — RF/BPSK link model in detail
+- [`security.md`](security.md) — threat model and command-authentication design
+- [`telemetry-protocol.md`](telemetry-protocol.md) — packet field reference
